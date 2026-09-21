@@ -31,7 +31,7 @@ jobs:
     env:
       CGO_ENABLED: "1"
       GOLANG_PROTOBUF_REGISTRATION_CONFLICT: warn
-      CGO_CFLAGS: -Wno-deprecated-declarations
+      CGO_CFLAGS: -Wno-deprecated-declarations -IC:/vcpkg/installed/x64-windows/include
       EDITION: lite
     steps:
       - uses: actions/checkout@v6
@@ -56,6 +56,11 @@ jobs:
         run: |
           sed -i 's/\r$//' licenses/sources/modules.tsv go.mod
 
+      - name: Install SQLite3 headers
+        shell: pwsh
+        run: |
+          vcpkg install sqlite3:x64-windows
+
       - name: Install NSIS
         shell: pwsh
         run: choco install nsis -y
@@ -64,7 +69,7 @@ jobs:
         shell: bash
         run: |
           cd cmd/desktop
-          go build -p 1 -buildvcs=false -tags "desktop,sqlite_fts5,production" -o _prebuild_tmp.exe . || true
+          go build -p 1 -buildvcs=false -tags "desktop,sqlite_fts5,production" -o _prebuild_tmp.exe .
           rm -f _prebuild_tmp.exe
 
       - name: Build desktop installer
@@ -74,7 +79,13 @@ jobs:
           LDFLAGS="$(./scripts/get_version.sh ldflags) -X 'google.golang.org/protobuf/reflect/protoregistry.conflictPolicy=warn'"
           bash ./scripts/check-license-bundle.sh
           cd cmd/desktop
-          wails build -clean             -tags "sqlite_fts5"             -platform "windows/amd64"             -nsis             -ldflags="${LDFLAGS}"             -o "WeKnora Lite"
+          wails build -clean \
+            -skipbindings \
+            -tags "sqlite_fts5" \
+            -platform "windows/amd64" \
+            -nsis \
+            -ldflags="${LDFLAGS}" \
+            -o "WeKnora Lite"
 
       - name: Collect installer
         shell: pwsh
