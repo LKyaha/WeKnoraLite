@@ -122,6 +122,63 @@ jobs:
           if (!(Test-Path $installer)) { throw "Installer not found: $installer" }
           Copy-Item $installer "artifacts/WeKnora-Lite-windows-amd64-setup.exe"
 
+      - name: Smoke test installed desktop and startup log
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = (Resolve-Path 'artifacts/WeKnora-Lite-windows-amd64-setup.exe').Path
+          $installDir = Join-Path $env:RUNNER_TEMP 'WeKnoraLiteSmoke'
+          $setup = Start-Process -FilePath $installer -ArgumentList @('/S', "/D=$installDir") -Wait -PassThru
+          if ($setup.ExitCode -ne 0) { throw "NSIS silent install exited $($setup.ExitCode)" }
+          $app = Join-Path $installDir 'WeKnora Lite.exe'
+          if (!(Test-Path $app)) { throw "Missing installed executable: $app" }
+          foreach ($resource in @('config/config.yaml', 'web/index.html', 'migrations/sqlite', '.env')) {
+            if (!(Test-Path (Join-Path $installDir $resource))) { throw "Missing installed resource: $resource" }
+          }
+          $logPath = Join-Path $env:LOCALAPPDATA 'WeKnora Lite\logs\startup.log'
+          $process = $null
+          try {
+            $process = Start-Process -FilePath $app -WorkingDirectory $installDir -PassThru
+            $deadline = (Get-Date).AddSeconds(60)
+            $ready = $false
+            while ((Get-Date) -lt $deadline) {
+              Start-Sleep -Seconds 2
+              $process.Refresh()
+              if (Test-Path $logPath) {
+                $logText = Get-Content -LiteralPath $logPath -Raw -ErrorAction SilentlyContinue
+                if ($logText -match 'Server is running at') { $ready = $true; break }
+              }
+              if ($process.HasExited) { break }
+            }
+            if (!(Test-Path $logPath)) { throw "Desktop did not produce startup log: $logPath" }
+            if (!$ready) {
+              Get-Content -LiteralPath $logPath -Tail 80
+              throw 'Desktop did not reach backend readiness. See startup.log above.'
+            }
+            if ($process.HasExited) { throw "Desktop exited after backend startup: $($process.ExitCode)" }
+            Write-Host 'PASS: installed EXE started, wrote startup.log, and reached backend readiness.'
+          } finally {
+            if ($process -and !$process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
+          }
+
+      - name: Preserve desktop smoke diagnostics on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          $logPath = Join-Path $env:LOCALAPPDATA 'WeKnora Lite\logs\startup.log'
+          if (Test-Path $logPath) {
+            New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+            Get-Content -LiteralPath $logPath -Tail 160 | Set-Content artifacts/smoke-startup.log
+          }
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: WeKnora-Lite-Startup-Diagnostics
+          path: artifacts/smoke-startup.log
+          if-no-files-found: ignore
+          retention-days: 7
+
       - uses: actions/upload-artifact@v7
         with:
           name: WeKnora-Lite-Windows
