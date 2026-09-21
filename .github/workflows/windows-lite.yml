@@ -31,7 +31,8 @@ jobs:
     env:
       CGO_ENABLED: "1"
       GOLANG_PROTOBUF_REGISTRATION_CONFLICT: warn
-      CGO_CFLAGS: -Wno-deprecated-declarations -DSQLITE_STATIC -IC:/vcpkg/installed/x64-windows/include
+      CGO_CFLAGS: -Wno-deprecated-declarations -DSQLITE_STATIC -IC:/vcpkg/installed/x64-mingw-static/include
+      CGO_LDFLAGS: -LC:/vcpkg/installed/x64-mingw-static/lib -lsqlite3
       EDITION: lite
     steps:
       - uses: actions/checkout@v6
@@ -59,7 +60,7 @@ jobs:
       - name: Install SQLite3 headers
         shell: pwsh
         run: |
-          vcpkg install sqlite3:x64-windows
+          vcpkg install "sqlite3[fts5]:x64-mingw-static"
 
       - name: Install NSIS
         shell: pwsh
@@ -69,7 +70,7 @@ jobs:
         shell: bash
         run: |
           cd cmd/desktop
-          go build -p 1 -buildvcs=false -tags "desktop,sqlite_fts5,production" -o _prebuild_tmp.exe .
+          go build -p 1 -buildvcs=false -tags "desktop,sqlite_fts5,libsqlite3,production" -o _prebuild_tmp.exe .
           rm -f _prebuild_tmp.exe
 
       - name: Build desktop installer
@@ -81,7 +82,7 @@ jobs:
           cd cmd/desktop
           wails build -clean \
             -skipbindings \
-            -tags "sqlite_fts5" \
+            -tags "sqlite_fts5,libsqlite3" \
             -platform "windows/amd64" \
             -nsis \
             -ldflags="${LDFLAGS}" \
