@@ -59,12 +59,13 @@ jobs:
       - name: Prepare SQLite header for sqlite-vec
         shell: bash
         run: |
-          go mod download github.com/mattn/go-sqlite3
+          go mod download github.com/mattn/go-sqlite3 github.com/asg017/sqlite-vec-go-bindings
           SQLITE3_DIR="$(go list -m -f '{{.Dir}}' github.com/mattn/go-sqlite3)"
-          mkdir -p .ci/sqlite-include
-          cp "$SQLITE3_DIR/sqlite3-binding.h" .ci/sqlite-include/sqlite3.h
-          echo "CGO_CFLAGS=-Wno-deprecated-declarations -I$PWD/.ci/sqlite-include" >> "$GITHUB_ENV"
-          test -f .ci/sqlite-include/sqlite3.h
+          VEC_DIR="$(go list -m -f '{{.Dir}}' github.com/asg017/sqlite-vec-go-bindings)"
+          chmod -R u+w "$VEC_DIR/cgo" || true
+          cp "$SQLITE3_DIR/sqlite3-binding.h" "$VEC_DIR/cgo/sqlite3.h"
+          test -f "$VEC_DIR/cgo/sqlite3.h"
+          echo "sqlite3.h installed into $VEC_DIR/cgo"
 
       - name: Install NSIS
         shell: pwsh
