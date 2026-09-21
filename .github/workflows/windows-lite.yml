@@ -31,8 +31,7 @@ jobs:
     env:
       CGO_ENABLED: "1"
       GOLANG_PROTOBUF_REGISTRATION_CONFLICT: warn
-      CGO_CFLAGS: -Wno-deprecated-declarations -IC:/vcpkg/installed/x64-mingw-static/include
-      CGO_LDFLAGS: -LC:/vcpkg/installed/x64-mingw-static/lib -lsqlite3
+      CGO_CFLAGS: -Wno-deprecated-declarations
       EDITION: lite
     steps:
       - uses: actions/checkout@v6
@@ -57,10 +56,15 @@ jobs:
         run: |
           sed -i 's/\r$//' licenses/sources/modules.tsv go.mod
 
-      - name: Install SQLite3 headers
-        shell: pwsh
+      - name: Prepare SQLite header for sqlite-vec
+        shell: bash
         run: |
-          vcpkg install "sqlite3[fts5]:x64-mingw-static"
+          go mod download github.com/mattn/go-sqlite3
+          SQLITE3_DIR="$(go list -m -f '{{.Dir}}' github.com/mattn/go-sqlite3)"
+          mkdir -p .ci/sqlite-include
+          cp "$SQLITE3_DIR/sqlite3-binding.h" .ci/sqlite-include/sqlite3.h
+          echo "CGO_CFLAGS=-Wno-deprecated-declarations -I$PWD/.ci/sqlite-include" >> "$GITHUB_ENV"
+          test -f .ci/sqlite-include/sqlite3.h
 
       - name: Install NSIS
         shell: pwsh
@@ -70,7 +74,7 @@ jobs:
         shell: bash
         run: |
           cd cmd/desktop
-          go build -p 1 -buildvcs=false -tags "desktop,sqlite_fts5,libsqlite3,sqlite_unlock_notify,production" -o _prebuild_tmp.exe .
+          go build -p 1 -buildvcs=false -tags "desktop,sqlite_fts5,production" -o _prebuild_tmp.exe .
           rm -f _prebuild_tmp.exe
 
       - name: Build desktop installer
@@ -82,7 +86,7 @@ jobs:
           cd cmd/desktop
           wails build -clean \
             -skipbindings \
-            -tags "sqlite_fts5,libsqlite3,sqlite_unlock_notify" \
+            -tags "sqlite_fts5" \
             -platform "windows/amd64" \
             -nsis \
             -ldflags="${LDFLAGS}" \
