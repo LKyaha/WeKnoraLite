@@ -1,0 +1,119 @@
+name: Windows Lite Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/windows-lite.yml"
+      - "cmd/desktop/**"
+      - "frontend/**"
+      - "cli/**"
+      - "client/**"
+      - "scripts/**"
+      - "config/**"
+      - "migrations/sqlite/**"
+      - "go.mod"
+      - "go.sum"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-lite-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  desktop:
+    name: Build WeKnora Lite Desktop
+    runs-on: windows-latest
+    env:
+      CGO_ENABLED: "1"
+      GOLANG_PROTOBUF_REGISTRATION_CONFLICT: warn
+      CGO_CFLAGS: -Wno-deprecated-declarations
+      EDITION: lite
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.24"
+          cache: true
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Wails CLI
+        shell: pwsh
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Install NSIS
+        shell: pwsh
+        run: choco install nsis -y
+
+      - name: Pre-compile Go packages
+        shell: bash
+        run: |
+          cd cmd/desktop
+          go build -p 1 -buildvcs=false -tags "desktop,sqlite_fts5,production" -o _prebuild_tmp.exe . || true
+          rm -f _prebuild_tmp.exe
+
+      - name: Build desktop installer
+        shell: bash
+        run: |
+          eval "$(./scripts/get_version.sh env)"
+          LDFLAGS="$(./scripts/get_version.sh ldflags) -X 'google.golang.org/protobuf/reflect/protoregistry.conflictPolicy=warn'"
+          bash ./scripts/check-license-bundle.sh
+          cd cmd/desktop
+          wails build -clean             -tags "sqlite_fts5"             -platform "windows/amd64"             -nsis             -ldflags="${LDFLAGS}"             -o "WeKnora Lite"
+
+      - name: Collect installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          $installer = "cmd/desktop/build/bin/WeKnora Lite-amd64-installer.exe"
+          if (!(Test-Path $installer)) { throw "Installer not found: $installer" }
+          Copy-Item $installer "artifacts/WeKnora-Lite-windows-amd64-setup.exe"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: WeKnora-Lite-Windows
+          path: artifacts/WeKnora-Lite-windows-amd64-setup.exe
+          retention-days: 30
+
+  cli:
+    name: Build WeKnora CLI
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+          cache: true
+          cache-dependency-path: |
+            cli/go.sum
+            client/go.sum
+
+      - name: Build CLI
+        shell: pwsh
+        working-directory: cli
+        run: |
+          go build -trimpath -ldflags="-s -w" -o weknora.exe .
+
+      - name: Smoke test CLI
+        shell: pwsh
+        working-directory: cli
+        run: |
+          .\weknora.exe version
+          .\weknora.exe --help | Select-Object -First 20
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: WeKnora-CLI-Windows
+          path: cli/weknora.exe
+          retention-days: 30
