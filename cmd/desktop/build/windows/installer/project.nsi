@@ -1,5 +1,5 @@
 ; Based on the Wails v2.12.0 default installer (MIT).
-; See licenses/Wails-MIT.txt. Local change: install the notice/source bundle.
+; See licenses/Wails-MIT.txt. Local change: bundle all runtime resources and notices.
 Unicode true
 
 ####
@@ -16,7 +16,7 @@ Unicode true
 ## > makensis -DARG_WAILS_AMD64_BINARY=..\..\bin\app.exe
 ## For a ARM64 only installer:
 ## > makensis -DARG_WAILS_ARM64_BINARY=..\..\bin\app.exe
-## For a installer with both architectures:
+## For an installer with both architectures:
 ## > makensis -DARG_WAILS_AMD64_BINARY=..\..\bin\app-amd64.exe -DARG_WAILS_ARM64_BINARY=..\..\bin\app-arm64.exe
 ####
 ## The following information is taken from the ProjectInfo file, but they can be overwritten here.
@@ -44,8 +44,8 @@ VIAddVersionKey "CompanyName"     "${INFO_COMPANYNAME}"
 VIAddVersionKey "FileDescription" "${INFO_PRODUCTNAME} Installer"
 VIAddVersionKey "ProductVersion"  "${INFO_PRODUCTVERSION}"
 VIAddVersionKey "FileVersion"     "${INFO_PRODUCTVERSION}"
-VIAddVersionKey "LegalCopyright"  "${INFO_COPYRIGHT}"
-VIAddVersionKey "ProductName"     "${INFO_PRODUCTNAME}"
+VIAddVersionKey "LegalCopyright" "${INFO_COPYRIGHT}"
+VIAddVersionKey "ProductName"    "${INFO_PRODUCTNAME}"
 
 # Enable HiDPI support. https://nsis.sourceforge.io/Reference/ManifestDPIAware
 ManifestDPIAware true
@@ -54,28 +54,27 @@ ManifestDPIAware true
 
 !define MUI_ICON "..\icon.ico"
 !define MUI_UNICON "..\icon.ico"
-# !define MUI_WELCOMEFINISHPAGE_BITMAP "resources\leftimage.bmp" #Include this to add a bitmap on the left side of the Welcome Page. Must be a size of 164x314
-!define MUI_FINISHPAGE_NOAUTOCLOSE # Wait on the INSTFILES page so the user can take a look into the details of the installation steps
-!define MUI_ABORTWARNING # This will warn the user if they exit from the installer.
+# !define MUI_WELCOMEFINISHPAGE_BITMAP "resources\leftimage.bmp" # Include a bitmap for the Welcome Page.
+!define MUI_FINISHPAGE_NOAUTOCLOSE # Wait on the INSTFILES page so the user can look into the installation details.
+!define MUI_ABORTWARNING # Warn if the user exits from the installer.
 
-!insertmacro MUI_PAGE_WELCOME # Welcome to the installer page.
-# !insertmacro MUI_PAGE_LICENSE "resources\eula.txt" # Adds a EULA page to the installer
-!insertmacro MUI_PAGE_DIRECTORY # In which folder install page.
-!insertmacro MUI_PAGE_INSTFILES # Installing page.
-!insertmacro MUI_PAGE_FINISH # Finished installation page.
+!insertmacro MUI_PAGE_WELCOME
+# !insertmacro MUI_PAGE_LICENSE "resources\eula.txt"
+!insertmacro MUI_PAGE_DIRECTORY
+!insertmacro MUI_PAGE_INSTFILES
+!insertmacro MUI_PAGE_FINISH
 
-!insertmacro MUI_UNPAGE_INSTFILES # Uinstalling page
+!insertmacro MUI_UNPAGE_INSTFILES
+!insertmacro MUI_LANGUAGE "English"
 
-!insertmacro MUI_LANGUAGE "English" # Set the Language of the installer
-
-## The following two statements can be used to sign the installer and the uninstaller. The path to the binaries are provided in %1
+## The following two statements can sign the installer and uninstaller.
 #!uninstfinalize 'signtool --file "%1"'
 #!finalize 'signtool --file "%1"'
 
 Name "${INFO_PRODUCTNAME}"
-OutFile "..\..\bin\${INFO_PROJECTNAME}-${ARCH}-installer.exe" # Name of the installer's file.
-InstallDir "$PROGRAMFILES64\${INFO_COMPANYNAME}\${INFO_PRODUCTNAME}" # Default installing folder ($PROGRAMFILES is Program Files folder).
-ShowInstDetails show # This will always show the installation details.
+OutFile "..\..\bin\${INFO_PROJECTNAME}-${ARCH}-installer.exe"
+InstallDir "$PROGRAMFILES64\${INFO_COMPANYNAME}\${INFO_PRODUCTNAME}"
+ShowInstDetails show
 
 Function .onInit
    !insertmacro wails.checkArchitecture
@@ -83,14 +82,23 @@ FunctionEnd
 
 Section
     !insertmacro wails.setShellContext
-
     !insertmacro wails.webview2runtime
 
     SetOutPath $INSTDIR
-
     !insertmacro wails.files
 
-    ; Paths are relative to cmd/desktop/build/windows/installer.
+    ; Runtime resource paths are relative to cmd/desktop/build/windows/installer.
+    ; The Wails window reverse-proxies the built-in Gin backend, which reads
+    ; config/config.yaml, web/index.html and migrations/sqlite from the EXE cwd.
+    File /oname=.env "..\..\..\..\..\.env.lite.example"
+    SetOutPath "$INSTDIR\config"
+    File /r "..\..\..\..\..\config\*"
+    SetOutPath "$INSTDIR\web"
+    File /r "..\..\..\..\..\frontend\dist\*"
+    SetOutPath "$INSTDIR\migrations\sqlite"
+    File /r "..\..\..\..\..\migrations\sqlite\*"
+
+    SetOutPath $INSTDIR
     File "..\..\..\..\..\LICENSE"
     File "..\..\..\..\..\THIRD_PARTY_NOTICES.md"
     SetOutPath "$INSTDIR\licenses"
@@ -102,15 +110,13 @@ Section
 
     !insertmacro wails.associateFiles
     !insertmacro wails.associateCustomProtocols
-
     !insertmacro wails.writeUninstaller
 SectionEnd
 
 Section "uninstall"
     !insertmacro wails.setShellContext
 
-    RMDir /r "$AppData\${PRODUCT_EXECUTABLE}" # Remove the WebView2 DataPath
-
+    RMDir /r "$AppData\${PRODUCT_EXECUTABLE}" # Remove the WebView2 DataPath.
     RMDir /r $INSTDIR
 
     Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
@@ -118,6 +124,5 @@ Section "uninstall"
 
     !insertmacro wails.unassociateFiles
     !insertmacro wails.unassociateCustomProtocols
-
     !insertmacro wails.deleteUninstaller
 SectionEnd
