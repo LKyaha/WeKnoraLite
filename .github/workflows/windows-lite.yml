@@ -31,7 +31,7 @@ jobs:
     env:
       CGO_ENABLED: "1"
       GOLANG_PROTOBUF_REGISTRATION_CONFLICT: warn
-      CGO_CFLAGS: -Wno-deprecated-declarations -IC:/vcpkg/installed/x64-windows/include
+      CGO_CFLAGS: -Wno-deprecated-declarations -DSQLITE_STATIC -IC:/vcpkg/installed/x64-windows/include
       EDITION: lite
     steps:
       - uses: actions/checkout@v6
