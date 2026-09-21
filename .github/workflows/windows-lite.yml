@@ -31,7 +31,7 @@ jobs:
     env:
       CGO_ENABLED: "1"
       GOLANG_PROTOBUF_REGISTRATION_CONFLICT: warn
-      CGO_CFLAGS: -Wno-deprecated-declarations -DSQLITE_STATIC -IC:/vcpkg/installed/x64-mingw-static/include
+      CGO_CFLAGS: -Wno-deprecated-declarations -IC:/vcpkg/installed/x64-mingw-static/include
       CGO_LDFLAGS: -LC:/vcpkg/installed/x64-mingw-static/lib -lsqlite3
       EDITION: lite
     steps:
@@ -70,7 +70,7 @@ jobs:
         shell: bash
         run: |
           cd cmd/desktop
-          go build -p 1 -buildvcs=false -tags "desktop,sqlite_fts5,libsqlite3,production" -o _prebuild_tmp.exe .
+          go build -p 1 -buildvcs=false -tags "desktop,sqlite_fts5,libsqlite3,sqlite_unlock_notify,production" -o _prebuild_tmp.exe .
           rm -f _prebuild_tmp.exe
 
       - name: Build desktop installer
@@ -82,7 +82,7 @@ jobs:
           cd cmd/desktop
           wails build -clean \
             -skipbindings \
-            -tags "sqlite_fts5,libsqlite3" \
+            -tags "sqlite_fts5,libsqlite3,sqlite_unlock_notify" \
             -platform "windows/amd64" \
             -nsis \
             -ldflags="${LDFLAGS}" \
